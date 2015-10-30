@@ -2381,7 +2381,7 @@
                    (-pair (one-of/c 'a 'b 'c) (-lst (one-of/c 'a 'b 'c))))]
        [tc-e (assoc 3
                     '((a . #(a)) (b . #(b)) (c . #(c)))
-                    (lambda: ([s1 : (U Number Symbol String)] [s2 : String])
+                    (lambda: ([s1 : (U Number Symbol String)] [s2 : Symbol])
                       (= (string-length (format "~a" s1))
                          (string-length (symbol->string s2)))))
              (t:Un (-val #f) (-pair (one-of/c 'a 'b 'c) (-vec -Symbol)))]
