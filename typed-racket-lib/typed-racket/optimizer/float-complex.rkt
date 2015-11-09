@@ -50,14 +50,14 @@
       "The optimizer could optimize it better if it had type Float-Complex.")
     this-syntax))
 
-;; If a part is 0.0?
-(define (0.0? stx)
-  (equal? (syntax->datum stx) 0.0))
-
 
 ;; a+bi / c+di, names for real and imag parts of result -> one let-values binding clause
 (define (unbox-one-complex-/ a b c d res-real res-imag)
-  (define both-real? (and (0.0? b) (0.0? d)))
+  (define first-arg-real? (syntax-property b 'was-real?))
+  (define second-arg-real? (syntax-property d 'was-real?))
+  ;; if both are real, we can short-circuit a lot
+  (define both-real? (and first-arg-real? second-arg-real?))
+
   ;; we have the same cases as the Racket `/' primitive (except for the non-float ones)
   (define d=0-case
     #`(values (unsafe-fl+ (unsafe-fl/ #,a #,c)
@@ -85,10 +85,17 @@
                         (unsafe-fl/ (unsafe-fl- (unsafe-fl* b r) a) den))])
         (values (unsafe-fl/ (unsafe-fl+ b (unsafe-fl* a r)) den)
                 i)))
+
   (cond [both-real?
          #`[(#,res-real #,res-imag)
             (values (unsafe-fl/ #,a #,c)
                     0.0)]] ; currently not propagated
+        [second-arg-real?
+         #`[(#,res-real #,res-imag)
+            (values (unsafe-fl/ #,a #,c)
+                    (unsafe-fl/ #,b #,c))]]
+        [first-arg-real?
+         (unbox-one-float-complex-/ a c d res-real res-imag)]
         [else
          #`[(#,res-real #,res-imag)
             (cond [(unsafe-fl= #,d 0.0) #,d=0-case]
@@ -112,7 +119,7 @@
     #`(let* ([cm    (unsafe-flabs #,c)]
              [dm    (unsafe-flabs #,d)]
              [swap? (unsafe-fl< cm dm)]
-             [a     #,a]
+             [a     #,a] ; don't swap with `b` (`0`) here, but handle below
              [c     (if swap? #,d #,c)]
              [d     (if swap? #,c #,d)]
              [r     (unsafe-fl/ c d)]
@@ -198,27 +205,33 @@
                                               #'(cs.imag-binding ...))
                                      (list #'imag-binding))]
                          [res '()])
-                (if (null? e1)
-                    (reverse res)
-                    (loop (car rs) (car is) (cdr e1) (cdr e2) (cdr rs) (cdr is)
-                          ;; complex multiplication, imag part, then real part (reverse)
-                          ;; we eliminate operations on the imaginary parts of reals
-                          (let ((o-real? (0.0? o2))
-                                (e-real? (0.0? (car e2))))
-                            (list* #`((#,(car is))
-                                      #,(cond ((and o-real? e-real?) #'0.0)
-                                              (o-real? #`(unsafe-fl* #,o1 #,(car e2)))
-                                              (e-real? #`(unsafe-fl* #,o2 #,(car e1)))
-                                              (else
-                                               #`(unsafe-fl+ (unsafe-fl* #,o2 #,(car e1))
-                                                             (unsafe-fl* #,o1 #,(car e2))))))
-                                   #`((#,(car rs))
-                                      #,(cond ((or o-real? e-real?)
-                                               #`(unsafe-fl* #,o1 #,(car e1)))
-                                              (else
-                                               #`(unsafe-fl- (unsafe-fl* #,o1 #,(car e1))
-                                                             (unsafe-fl* #,o2 #,(car e2))))))
-                                 res))))))))
+                (cond
+                 [(null? e1)
+                  (reverse res)]
+                 [else
+                  (define o-real? (syntax-property o2 'was-real?))
+                  (define e-real? (syntax-property (car e2) 'was-real?))
+                  (define both-real? (and o-real? e-real?))
+                  (define new-imag-id (if both-real?
+                                          (syntax-property (car is) 'was-real? #t)
+                                          (car is)))
+                  (loop (car rs) new-imag-id (cdr e1) (cdr e2) (cdr rs) (cdr is)
+                        ;; complex multiplication, imag part, then real part (reverse)
+                        ;; we eliminate operations on the imaginary parts of reals
+                        (list* #`((#,new-imag-id)
+                                  #,(cond ((and o-real? e-real?) #'0.0)
+                                          (o-real? #`(unsafe-fl* #,o1 #,(car e2)))
+                                          (e-real? #`(unsafe-fl* #,o2 #,(car e1)))
+                                          (else
+                                           #`(unsafe-fl+ (unsafe-fl* #,o2 #,(car e1))
+                                                         (unsafe-fl* #,o1 #,(car e2))))))
+                               #`((#,(car rs))
+                                  #,(cond ((or o-real? e-real?)
+                                           #`(unsafe-fl* #,o1 #,(car e1)))
+                                          (else
+                                           #`(unsafe-fl- (unsafe-fl* #,o1 #,(car e1))
+                                                         (unsafe-fl* #,o2 #,(car e2))))))
+                               res))])))))
   (pattern (#%plain-app op:*^ :unboxed-float-complex-opt-expr)
     #:when (subtypeof? this-syntax -FloatComplex)
     #:do [(log-unboxing-opt "unboxed unary float complex")])
@@ -332,10 +345,14 @@
          ((real-binding) (unsafe-flreal-part e*))
          ((imag-binding) (unsafe-flimag-part e*))))
 
-  ;; The following optimization is incorrect and causes bugs because it turns exact numbers into inexact
   (pattern e:number-expr
     #:with e* (generate-temporary)
-    #:with (real-binding imag-binding) (binding-names)
+    #:with (real-binding imag-binding*) (binding-names)
+    #:with imag-binding (if (subtypeof? #'e -Real)
+                            ;; values that were originally reals may need to be
+                            ;; handled specially
+                            (syntax-property #'imag-binding 'was-real? #t)
+                            #'imag-binding)
     #:do [(log-unboxing-opt
             (if (subtypeof? #'e -Flonum)
                 "float in complex ops"

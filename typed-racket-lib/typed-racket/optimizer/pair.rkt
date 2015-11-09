@@ -138,7 +138,7 @@
                      [res #'e.arg])
               ([accessor (in-list (reverse (syntax->list #'e.alt)))])
             (cond
-             [(subtype t (-pair Univ Univ)) ; safe to optimize this one layer
+             [(and t (subtype t (-pair Univ Univ))) ; safe to optimize this one layer
               (syntax-parse accessor
                 [op:pair-op
                  (log-pair-opt)

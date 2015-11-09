@@ -489,7 +489,7 @@
     (fl-type-lambda
       (from-cases (-FlZero -Fl . -> . -FlZero)
                   ;; we don't have Pos Pos -> Pos, possible underflow
-                  (-NonNegFl -NonNegFl . -> . -NonNegFl)
+                  (-PosFl -PosFl . -> . -NonNegFl)
                   (commutative-binop -PosFl -NegFl -NonPosFl)
                   (-NegFl -NegFl . -> . -NonNegFl)
                   (binop -Fl))))
@@ -1166,10 +1166,10 @@
     ;; reals
     (varop-1+ -NonNegReal -NonNegReal)
     (-> -NonPosReal -NonPosReal)
-    (-> -NonPosReal -NonPosReal -NonNegReal)
-    (-> -NonPosReal -NonNegReal -NonPosReal)
-    (-> -NonNegReal -NonPosReal -NonPosReal)
-    (-> -NonPosReal -NonPosReal -NonPosReal -NonPosReal)
+    (-> -NegReal -NegReal -NonNegReal) ; 0.0 is non-neg, but doesn't preserve sign
+    (-> -NegReal -PosReal -NonPosReal) ; idem
+    (-> -PosReal -NegReal -NonPosReal) ; idem
+    (-> -NegReal -NegReal -NegReal -NonPosReal) ; idem
     (varop-1+ -Real)
     ;; complexes
     (varop-1+ -FloatComplex)
@@ -1377,16 +1377,16 @@
                          (-Int -Int . -> . -Int))]
 
 [bitwise-and
- (let ([mix-with-int
+ (let ([mix-with-nat
         (lambda (t)
           (list (->* (list t) t t) ; closed
-                (->* (list -Int t) t t) ; brings result down
-                (->* (list t -Int) t t)))])
+                (->* (list -Nat t) t t) ; brings result down
+                (->* (list t -Nat) t t)))])
    (from-cases (-> -NegFixnum) ; no args -> -1
-               (map mix-with-int (list -Zero -Byte -Index -NonNegFixnum))
+               (map mix-with-nat (list -Zero -Byte -Index -NonNegFixnum))
                ;; closed on negatives, but not closed if we mix with positives
-               (map varop-1+ (list -NegFixnum -NonPosFixnum))
-               (map mix-with-int (list -Fixnum -Nat))
+               (map varop-1+ (list -NegFixnum -NonPosFixnum -Fixnum))
+               (map mix-with-nat (list -Nat))
                (map varop-1+ (list -NegInt -NonPosInt))
                (null -Int . ->* . -Int)))]
 [bitwise-ior
@@ -1621,8 +1621,12 @@
              (-InexactReal (Un -NegInt -PosInt) . -> . -InexactReal)
              (-InexactReal -InexactReal . -> . (Un -InexactReal -InexactComplex))
              (-Real -Int . -> . -Real)
-             (-FloatComplex (Un -InexactComplex -InexactReal) . -> . -FloatComplex)
-             (-SingleFlonumComplex (Un -SingleFlonum -SingleFlonumComplex) . -> . -SingleFlonumComplex)
+             (-FloatComplex -FloatComplex . -> . -FloatComplex)
+             (-FloatComplex -Flonum . -> . (Un -FloatComplex -Flonum))
+             (-FloatComplex -InexactReal . -> . (Un -FloatComplex -InexactReal))
+             (-FloatComplex -InexactComplex . -> . -FloatComplex)
+             (-SingleFlonumComplex -SingleFlonumComplex . -> . -SingleFlonumComplex)
+             (-SingleFlonumComplex -SingleFlonum . -> . (Un -SingleFlonumComplex -SingleFlonum))
              ((Un -InexactReal -InexactComplex) -InexactComplex . -> . -InexactComplex)
              (-InexactComplex (Un -InexactReal -InexactComplex) . -> . -InexactComplex)
              (N N . -> . N))]
