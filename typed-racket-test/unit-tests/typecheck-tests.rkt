@@ -2384,7 +2384,7 @@
                     (lambda: ([s1 : (U Number Symbol String)] [s2 : Symbol])
                       (= (string-length (format "~a" s1))
                          (string-length (symbol->string s2)))))
-             (t:Un (-val #f) (-pair (one-of/c 'a 'b 'c) (-vec -Symbol)))]
+             (t:Un (-val #f) (-pair (one-of/c 'a 'b 'c) (-vec* -Symbol)))]
        ;; Reject `member` when needle not included in is-equal?'s argument type:
        [tc-err (member (ann 123 Number)
                        '("bb" "c" "ddd")
