@@ -26,8 +26,8 @@
 (define-syntax-class vector-op
   #:commit
   ;; we need the non-* versions of these unsafe operations to be chaperone-safe
-  (pattern :vector-ref^  #:with unsafe #'unsafe-vector-ref  #:with unsafe-no-impersonator #'unsafe-vector*-ref)
-  (pattern :vector-set!^ #:with unsafe #'unsafe-vector-set! #:with unsafe-no-impersonator #'unsafe-vector*-set!))
+  (pattern v:vector-ref^  #:with unsafe (syntax/loc #'v unsafe-vector-ref)  #:with unsafe-no-impersonator (syntax/loc #'v unsafe-vector*-ref))
+  (pattern v:vector-set!^ #:with unsafe (syntax/loc #'v unsafe-vector-set!) #:with unsafe-no-impersonator (syntax/loc #'v unsafe-vector*-set!)))
 (define-merged-syntax-class flvector-op (flvector-ref^ flvector-set!^ extflvector-ref^ extflvector-set!^))
 
 (define-syntax-class known-length-vector-expr
